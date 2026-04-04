@@ -15,7 +15,9 @@
 #' * `pos_idx`: selected variable indices
 #' * `Z`: VC-measure summary matrix ([log1p()] transformed follow by [scale()])
 #' * `Z_raw`: the raw VC-measure summary matrix
-#' @importFrom stats quantile dist hclust cutree
+#' @importFrom stats dist hclust cutree
+#' @importFrom future.apply future_lapply
+#' @importFrom matrixStats colQuantiles
 #'
 #' @examples
 #' #' # Example code using `BART` R package as the backend
@@ -69,31 +71,84 @@
 #' VC_result$pos_idx
 #' }
 #'
+#' # Parallel processing example using the `future` package
+#' \dontrun{
+#' library(bayesVC)
+#' library(future)
+#'
+#' # Use all available cores
+#' plan(multisession)
+#'
+#' set.seed(123)
+#' n <- 1000
+#' p <- 100
+#' Lrep <- 10
+#'
+#' X <- matrix(runif(n * p), n, p)
+#' y_mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5 * X[, 5]
+#' eps <- rnorm(n, mean = 0, sd = 2)
+#' y <- y_mu + eps
+#'
+#' VC_result <- DartVC(
+#'   y = y,
+#'   X = X,
+#'   seed = 123,
+#'   Lrep = Lrep,
+#'   backend = "BART"
+#' )
+#' VC_result$pos_idx
+#'
+#' # Restore sequential execution
+#' plan(sequential)
+#' }
+#'
 
 #' @export
 DartVC <- function(y, X, seed = 123, Lrep = 10, backend = c("dartMachine", "BART")) {
+  backend <- match.arg(backend)
+
+  if (!is.numeric(y) || !is.null(dim(y)))
+    stop("'y' must be a numeric vector.")
+  if (anyNA(y))
+    stop("'y' contains NA values.")
+
+  if (!is.matrix(X) || !is.numeric(X))
+    stop("'X' must be a numeric matrix.")
+  if (anyNA(X))
+    stop("'X' contains NA values.")
+
+  if (nrow(X) != length(y))
+    stop(sprintf("nrow(X) (%d) must equal length(y) (%d).", nrow(X), length(y)))
+
   set.seed(seed)
   seeds <- sample.int(10000, size = Lrep)
+
+  rng_states <- lapply(seeds, function(s) { set.seed(s); .Random.seed })
 
   if (backend == "dartMachine") {
     if (!requireNamespace("dartMachine", quietly = TRUE)) {
       stop("Package dartMachine is required but not installed. Please install it from https://github.com/theodds/dartMachine")
     }
-    results <- DartVC_dartMachine(y, X, Lrep, seeds)
-  } else if (backend == "BART") {
+    worker <- DartVC_dartMachine
+    X <- as.data.frame(X)
+  } else {
     if (!requireNamespace("BART", quietly = TRUE)) {
       stop("Package BART is required but not installed. Please install it with install.packages('BART').")
     }
-    results <- DartVC_BART(y, X, Lrep, seeds)
-  } else {
-    stop('backend must be either "dartMachine" or "BART"')
+    worker <- DartVC_BART
   }
 
+  vc_list <- future_lapply(seq_len(Lrep), worker, y = y, Xmat = X, seeds = seeds,
+                           future.seed = rng_states)
+
+  vc <- do.call(rbind, vc_list)
+  vc_rank <- t(apply(vc, 1, function(x) rank(-x)))
+
   # Calculate summary statistics
-  vc_avg <- colMeans(results$vc)
-  vc_q25 <- apply(results$vc, 2, function(x) quantile(x, 0.25))
-  vc_rank_avg <- colMeans(results$vc_rank)
-  vc_rank_q75 <- apply(results$vc_rank, 2, function(x) quantile(x, 0.75))
+  vc_avg <- colMeans(vc)
+  vc_q25 <- matrixStats::colQuantiles(vc, probs = 0.25)
+  vc_rank_avg <- colMeans(vc_rank)
+  vc_rank_q75 <- matrixStats::colQuantiles(vc_rank, probs = 0.75)
 
   # Combine summary statistics
   Z_raw <- cbind(vc_avg, vc_q25, vc_rank_avg, vc_rank_q75)
@@ -116,59 +171,39 @@ DartVC <- function(y, X, seed = 123, Lrep = 10, backend = c("dartMachine", "BART
   return(list(pos_idx = pos_idx, Z = Z, Z_raw = Z_raw))
 }
 
-DartVC_dartMachine <- function(y, X, Lrep, seeds) {
-  X <- as.data.frame(X)
-  vc <- matrix(NA, nrow = Lrep, ncol = ncol(X))
-
-  # Train Lrep DART models using different seeds
+DartVC_dartMachine <- function(l, y, Xmat, seeds) {
   temp_output <- tempfile()
   sink(temp_output)
-  for (l in 1:Lrep) {
-    dm <- dartMachine::bartMachine(
-      X = X,
-      y = y,
-      num_trees = 20,
-      num_burn_in = 5000,
-      num_iterations_after_burn_in = 5000,
-      run_in_sample = FALSE,
-      serialize = FALSE,
-      seed = seeds[l],
-      verbose = FALSE,
-      do_ard = TRUE,
-      do_prior = TRUE
-    )
-    vc_full <- dartMachine::get_var_counts_over_chain(dm)
-    vc[l, ] <- colMeans(vc_full)
-  }
-  sink()
-  unlink(temp_output)
-  vc_rank <- t(apply(vc, 1, function(x) rank(-x)))
-
-  return(list(vc = vc, vc_rank = vc_rank))
+  on.exit({ sink(); unlink(temp_output) })
+  dm <- dartMachine::bartMachine(
+    X = Xmat,
+    y = y,
+    num_trees = 20,
+    num_burn_in = 5000,
+    num_iterations_after_burn_in = 5000,
+    run_in_sample = FALSE,
+    serialize = FALSE,
+    seed = seeds[l],
+    verbose = FALSE,
+    do_ard = TRUE,
+    do_prior = TRUE
+  )
+  vc_full <- dartMachine::get_var_counts_over_chain(dm)
+  colMeans(vc_full)
 }
 
-DartVC_BART <- function(y, X, Lrep, seeds) {
-  vc <- matrix(NA, nrow = Lrep, ncol = ncol(X))
-
-  # Train Lrep DART models using different seeds
+DartVC_BART <- function(l, y, Xmat, ...) {
   temp_output <- tempfile()
   sink(temp_output)
-  for (l in 1:Lrep) {
-    set.seed(seeds[l])
-    dart <- BART::wbart(
-      x.train = X,
-      y.train = y,
-      sparse = TRUE,
-      ntree = 20,
-      nskip = 5000,
-      ndpost = 5000,
-      printevery = 10000
-    )
-    vc[l, ] <- dart$varcount.mean
-  }
-  sink()
-  unlink(temp_output)
-  vc_rank <- t(apply(vc, 1, function(x) rank(-x)))
-
-  return(list(vc = vc, vc_rank = vc_rank))
+  on.exit({ sink(); unlink(temp_output) })
+  dart <- BART::wbart(
+    x.train = Xmat,
+    y.train = y,
+    sparse = TRUE,
+    ntree = 20,
+    nskip = 5000,
+    ndpost = 5000,
+    printevery = 10000
+  )
+  dart$varcount.mean
 }

@@ -82,4 +82,35 @@ VC_result <- DartVC(
 VC_result$pos_idx
 }
 
+# Parallel processing example using the `future` package
+\dontrun{
+library(bayesVC)
+library(future)
+
+# Use all available cores
+plan(multisession)
+
+set.seed(123)
+n <- 1000
+p <- 100
+Lrep <- 10
+
+X <- matrix(runif(n * p), n, p)
+y_mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5 * X[, 5]
+eps <- rnorm(n, mean = 0, sd = 2)
+y <- y_mu + eps
+
+VC_result <- DartVC(
+  y = y,
+  X = X,
+  seed = 123,
+  Lrep = Lrep,
+  backend = "BART"
+)
+VC_result$pos_idx
+
+# Restore sequential execution
+plan(sequential)
+}
+
 }

@@ -112,6 +112,45 @@ VC_result <- DartVC(
 VC_result$pos_idx
 ```
 
+## Parallel processing
+
+`DartVC` runs the `Lrep` replications via
+[`future.apply::future_lapply`](https://future.apply.futureverse.org/),
+so parallelism is controlled by the
+[`future`](https://future.futureverse.org/) package. By default it runs
+sequentially. To use all available cores, set a `multisession` plan
+before calling `DartVC`:
+
+``` r
+library(future)
+library(bayesVC)
+
+# Use all available cores
+plan(multisession)
+
+set.seed(123)
+n <- 1000
+p <- 100
+Lrep <- 10
+
+X <- matrix(runif(n * p), n, p)
+y_mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5 * X[, 5]
+eps <- rnorm(n, mean = 0, sd = 2)
+y <- y_mu + eps
+
+VC_result <- DartVC(
+  y = y,
+  X = X,
+  seed = 123,
+  Lrep = Lrep,
+  backend = "BART"
+)
+VC_result$pos_idx
+
+# Restore sequential execution
+plan(sequential)
+```
+
 ## Reproduce paper results
 
 ### Submit simulations

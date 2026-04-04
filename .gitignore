@@ -1,8 +1,43 @@
-.DS_Store
+# History files
 .Rhistory
+.Rapp.history
+
+# Session Data files
+.RData
+.RDataTmp
+
+# User-specific files
+.Ruserdata
+
+# RStudio files
+.Rproj.user/
+*.Rproj
+
+# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
+.httr-oauth
+
+# knitr and R markdown default cache directories
+*_cache/
+/cache/
+
+# Temporary files created by R markdown
+*.utf8.md
+*.knit.md
+
+# R Environment Variables
+.Renviron
+
+# mac related files
+*.DS_Store
+**/.DS_Store
+
+# ignore files (likely datasets) if too large (> 100 MB)
+# specify pathway to dataset data/project_dataset.csv
+# if all datasets are too large then use data/*.csv (only ignores CSVs)
+# if you have other file types then use appropriate extension data/*.rds
+
+.claude
 results/no_idx/
 testing/
-.Rproj.user
-*.Rproj
 .Rbuildignore
-*.Rproj.user
+
