@@ -15,7 +15,7 @@ DartVC(y, X, seed = 123, Lrep = 10, backend = c("dartMachine", "BART"))
 
 \item{Lrep}{Number of replications.}
 
-\item{backend}{The R package used to implement DART. The two choices are \code{"dartMachine"} (the one used in the paper) and \code{"BART"}.}
+\item{backend}{The R package used to implement DART. The two choices are \code{"BART"} and \code{"dartMachine"} (the one used in the paper).}
 }
 \value{
 A list containing
@@ -27,16 +27,13 @@ A list containing
 }
 \description{
 This function trains \code{Lrep} (default to 10) DART models using different random
-seeds, and extracts the VC-measure from each fit. Hierarchical agglomerative clustering (HAC)
+seeds, and extracts the VC-measure from each fit. Hierarchical Agglomerative Clustering (HAC)
 is then performed on the VC-measure and identifies important predictors.
 }
 \examples{
-# Example code using `dartMachine` R package as the backend
+#' # Example code using `BART` R package as the backend
 \dontrun{
-# Must allocate memory before loading `BartVC` package when using `dartMachine` backend
-# Here I allocated 5GB of memory for Java
-options(java.parameters = c("-Xmx5g"))
-library(BartVC)
+library(bayesVC)
 
 set.seed(123)
 n <- 1000
@@ -48,17 +45,22 @@ y_mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5
 eps <- rnorm(n, mean = 0, sd = 2)
 y <- y_mu + eps
 
-VC_result <- DartVC(y = y,
-                    X = X,
-                    seed = 123,
-                    Lrep = Lrep,
-                    backend = "dartMachine")
+VC_result <- DartVC(
+  y = y,
+  X = X,
+  seed = 123,
+  Lrep = Lrep,
+  backend = "BART"
+)
 VC_result$pos_idx
 }
 
-# Example code using `BART` R package as the backend
+# Example code using `dartMachine` R package as the backend
 \dontrun{
-library(BartVC)
+# Must allocate memory before loading `bayesVC` package when using `dartMachine` backend
+# Here I allocated 5GB of memory for Java
+options(java.parameters = c("-Xmx5g"))
+library(bayesVC)
 
 set.seed(123)
 n <- 1000
@@ -70,11 +72,14 @@ y_mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5
 eps <- rnorm(n, mean = 0, sd = 2)
 y <- y_mu + eps
 
-VC_result <- DartVC(y = y,
-                    X = X,
-                    seed = 123,
-                    Lrep = Lrep,
-                    backend = "dartMachine")
-VC_result[["pos_idx"]]
+VC_result <- DartVC(
+  y = y,
+  X = X,
+  seed = 123,
+  Lrep = Lrep,
+  backend = "dartMachine"
+)
+VC_result$pos_idx
 }
+
 }

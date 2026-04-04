@@ -1,39 +1,41 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# BartVC
+# bayesVC
 
 <!-- badges: start -->
 
 <!-- badges: end -->
 
-BartVC implements the VC-measure based nonparametric variable selection
-method introduce in [arxiv](http://arxiv.org). The current package
-utilizes Dirichlet Additive Regression Trees
+bayesVC implements the VC-measure based nonparametric variable selection
+method introduce in [*Posterior Summarization for Variable Selection in
+Bayesian Tree Ensembles*](https://arxiv.org/abs/2509.07121).
+
+The current package utilizes Dirichlet Additive Regression Trees
 ([DART](https://www.tandfonline.com/doi/full/10.1080/01621459.2016.1264957))
 as the nonparametric model, though other Bayesian tree ensemble models
 can also be used. We refer to VC-measure with DART backend as **DART
 VC-measure**.
 
-## Backends
-
-The BartVC R package currently supports two flavors of DART
-implementations:
-
-- `dartMachine`: requires installation from
-  <https://github.com/theodds/dartMachine>
-- `BART`: installed automatically with `BartVC`, or can be easily
-  installed via `install.packages('BART')`
-
 ## Installation
 
-You can install the development version of `BartVC` from
-[GitHub](https://github.com/mattsheng/BartVC) with:
+You can install the development version of `bayesVC` from
+[GitHub](https://github.com/mattsheng/bayesVC) with:
 
 ``` r
-# install.packages("devtools")
-devtools::install_github("mattsheng/BartVC")
+# install.packages("pak")
+pak::pkg_install("mattsheng/bayesVC")
 ```
+
+## Backends
+
+The bayesVC R package currently supports two flavors of DART
+implementations:
+
+- `BART`: installed automatically with `bayesVC`, or can be easily
+  installed via `install.packages('BART')`
+- `dartMachine`: requires installation from
+  <https://github.com/theodds/dartMachine>
 
 ## Example
 
@@ -46,14 +48,11 @@ sampled iid from an Uniform(0, 1) distribution. The goal is to identify
 the truly relevant predictors, namely $(x_1,x_2,x_3,x_4,x_5)$, from all
 $p=100$ predictors.
 
-To use the `dartMachine` backend, we must allocate memory for Java
-before loading the `BartVC` package:
+To use the `BART` backend, simply load the `bayesVC` package and run the
+following code:
 
 ``` r
-# Must allocate memory before loading `BartVC` package when using `dartMachine` backend
-# Here I allocated 5GB of memory for Java
-options(java.parameters = c("-Xmx5g"))
-library(BartVC)
+library(bayesVC)
 
 set.seed(123)
 n <- 1000
@@ -66,29 +65,51 @@ y_mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5
 eps <- rnorm(n, mean = 0, sd = 2)
 y <- y_mu + eps
 
-# Perform DART VC-measure using "dartMachine" backend
-VC_result <- DartVC(y = y, 
-                    X = X, 
-                    seed = 123, 
-                    Lrep = Lrep, 
-                    backend = "dartMachine")
+# Perform DART VC-measure using `BART` backend
+VC_result <- DartVC(
+  y = y, 
+  X = X, 
+  seed = 123, 
+  Lrep = Lrep, 
+  backend = "BART"
+)
 
 # Examine the selected predictors
 VC_result$pos_idx
 #> [1] 1 2 3 4 5
 ```
 
-If we want to use the `BART` backend instead, simply replace
-`backend = "dartMachine"` with `backend = "BART"`:
+To use the `dartMachine` backend, we must allocate memory for Java
+before loading the `bayesVC` package:
 
 ``` r
-VC_result <- DartVC(y = y, 
-                    X = X, 
-                    seed = 123, 
-                    Lrep = Lrep, 
-                    backend = "BART")
+# Must allocate memory before loading `bayesVC` package when using `dartMachine` backend
+# Here I allocated 5GB of memory for Java
+options(java.parameters = c("-Xmx5g"))
+library(bayesVC)
+
+set.seed(123)
+n <- 1000
+p <- 100
+Lrep <- 10
+
+# Generate data (y, X)
+X <- matrix(runif(n * p), n, p)
+y_mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5 * X[, 5]
+eps <- rnorm(n, mean = 0, sd = 2)
+y <- y_mu + eps
+
+# Perform DART VC-measure using `dartMachine` backend
+VC_result <- DartVC(
+  y = y, 
+  X = X, 
+  seed = 123, 
+  Lrep = Lrep, 
+  backend = "dartMachine"
+)
+
+# Examine the selected predictors
 VC_result$pos_idx
-#> [1] 1 2 3 4 5
 ```
 
 ## Reproduce paper results
@@ -132,3 +153,8 @@ R functions in the [postprocessing/](postprocessing/) folders reproduce
 all figures in the paper. For instance,
 [postprocessing/fig3_12_13.R](postprocessing/fig3_12_13.R) reproduces
 Figures 3, 12, and 13 in the paper.
+
+## Reference
+
+Ye, S. and Li, M. (2025) Posterior Summarization for Variable Selection
+in Bayesian Tree Ensembles. [arXiv](https://arxiv.org/abs/2509.07121)

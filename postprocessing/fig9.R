@@ -45,21 +45,21 @@ df_rel <- df %>%
 # Average over `random_state`
 summary_df <- df_rel %>%
   group_by(dataset_name, n, SNR, Algorithm) %>%
-  summarize(TPR = median(diff_TPR), 
+  summarize(TPR = median(diff_TPR),
             FPR = median(diff_FPR),
             F1 = median(diff_F1),
             .groups = 'drop')
 summary_df_2 <- summary_df %>%
   group_by(n, SNR, Algorithm) %>%
-  summarize(TPR = mean(TPR), 
+  summarize(TPR = mean(TPR),
             FPR = mean(FPR),
             F1 = mean(F1),
             .groups = 'drop')
 
 # F1
-F1_summary <- summary_df_2 %>% 
+F1_summary <- summary_df_2 %>%
   select(n, SNR, Algorithm, F1) %>%
   rename(mean_value = F1)
-p9 <- feynman_SR_plot(F1_summary, xlab = "SNR", ylab = expression(Delta * F[1]), title = "") 
+p9 <- feynman_SR_plot(F1_summary, xlab = "SNR", ylab = expression(Delta * F[1]), title = "")
 ggsave("figs/fig9_F1_diff_L.pdf", plot = p9,
-       device = cairo_pdf, width = 10, height = 6.5)
+       device = cairo_pdf, width = 10, height = 5.5)

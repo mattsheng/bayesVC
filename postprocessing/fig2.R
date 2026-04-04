@@ -29,29 +29,29 @@ df$SNR <- factor(df$SNR, levels = c("0.25", "0.5", "1", "2", "5", "10", "15", "2
 # Average over `random_state`
 summary_df <- df %>%
   group_by(dataset_name, n, SNR, Algorithm) %>%
-  summarize(TPR = mean(TPR), 
+  summarize(TPR = mean(TPR),
             FPR = mean(FPR),
             F1 = mean(F1),
             time = mean(Runtime),
             .groups = 'drop')
 summary_df_2 <- summary_df %>%
   group_by(n, SNR, Algorithm) %>%
-  summarize(TPR = mean(TPR), 
+  summarize(TPR = mean(TPR),
             FPR = mean(FPR),
             F1 = mean(F1),
             time = mean(time),
             .groups = 'drop')
 
 # F1
-F1_summary <- summary_df_2 %>% 
+F1_summary <- summary_df_2 %>%
   select(n, SNR, Algorithm, F1) %>%
   rename(mean_value = F1)
 
 # Fig2
-F1_summary$Algorithm <- factor(F1_summary$Algorithm, 
+F1_summary$Algorithm <- factor(F1_summary$Algorithm,
                                levels = c("DART VC-measure",
-                                          "DART", 
+                                          "DART",
                                           "ABC Bayesian forests"))
 p2 <- feynman_SR_plot(F1_summary, xlab = "SNR", ylab = expression(F[1]), title = "")
 ggsave("figs/fig2_F1_DART_VC-measure.pdf", plot = p2,
-       device = cairo_pdf, width = 10, height = 7)
+       device = cairo_pdf, width = 10, height = 5.5)

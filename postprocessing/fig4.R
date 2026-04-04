@@ -65,7 +65,7 @@ p4l <- ggplot(df_demo, aes(x = vc_BART, y = vc_rank_BART, shape = idx, color = B
                inherit.aes = FALSE,
                arrow = arrow(length = unit(0.2, "cm")),
                color = "gray50"
-  ) + 
+  ) +
   theme(text = element_text(family = "Arial"))
 
 p4r <- ggplot(df_demo, aes(x = vc_DART, y = vc_rank_DART, shape = idx, color = DART_idx)) +
@@ -73,9 +73,9 @@ p4r <- ggplot(df_demo, aes(x = vc_DART, y = vc_rank_DART, shape = idx, color = D
   scale_shape_manual(values = c("Relevant" = 17, "Irrelevant" = 1)) +
   scale_color_manual(values = c("Not selected" = "dodgerblue", "Selected" = "tomato")) +
   labs(shape = "Ground Truth", color = "Selection", x = "DART VC", y = "DART VC Rank") +
-  theme_minimal() + 
+  theme_minimal() +
   theme(text = element_text(family = "Arial"))
 
 p4 <- p4l + p4r + plot_layout(guides = "collect") & theme(legend.position = "right")
 ggsave("figs/fig4_Scatterplot_DART_vs_BART_VC-measure.pdf", plot = p4,
-       device = cairo_pdf, width = 9, height = 3)
+       device = cairo_pdf, width = 9, height = 2.5)

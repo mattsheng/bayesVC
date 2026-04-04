@@ -8,7 +8,7 @@ source("postprocessing/plot_funs.R")
 
 # Load results
 df_BART_VC <- read_feather("results/with_idx/results_BART_VC_measure.feather")
-df_DART_VC <- read_feather("results/with_idx/results_DART_VC-measure.feather") %>% 
+df_DART_VC <- read_feather("results/with_idx/results_DART_VC-measure.feather") %>%
   filter(Algorithm == "DART VC-measure (L=10)") %>%
   mutate(Algorithm = case_match(Algorithm,
                                 "DART VC-measure (L=10)" ~ "DART VC-measure"))
@@ -25,27 +25,27 @@ df$Algorithm <- factor(df$Algorithm, levels = c("DART VC-measure", "BART VC-meas
 # Average over `random_state`
 summary_df <- df %>%
   group_by(dataset_name, n, SNR, Algorithm) %>%
-  summarize(TPR = mean(TPR), 
+  summarize(TPR = mean(TPR),
             FPR = mean(FPR),
             F1 = mean(F1),
             .groups = 'drop')
 summary_df_2 <- summary_df %>%
   group_by(n, SNR, Algorithm) %>%
-  summarize(TPR = mean(TPR), 
+  summarize(TPR = mean(TPR),
             FPR = mean(FPR),
             F1 = mean(F1),
             .groups = 'drop')
 
 # F1
-F1_summary <- summary_df_2 %>% 
+F1_summary <- summary_df_2 %>%
   select(n, SNR, Algorithm, F1) %>%
   rename(mean_value = F1)
-p3 <- feynman_SR_plot(F1_summary, xlab = "SNR", ylab = expression(F[1]), title = "") 
+p3 <- feynman_SR_plot(F1_summary, xlab = "SNR", ylab = expression(F[1]), title = "")
 ggsave("figs/fig3_F1_DART_vs_BART_VC-measure.pdf", plot = p3,
-       device = cairo_pdf, width = 10, height = 6.5)
+       device = cairo_pdf, width = 10, height = 5.5)
 
 # Supp A Fig 12
-TPR_summary <- summary_df_2 %>% 
+TPR_summary <- summary_df_2 %>%
   select(n, SNR, Algorithm, TPR) %>%
   rename(mean_value = TPR)
 p12 <- feynman_SR_plot(TPR_summary, xlab = "SNR", ylab = "TPR", title = "")
@@ -53,7 +53,7 @@ ggsave("figs/fig12_TPR_DART_vs_BART_VC-measure.pdf", plot = p12,
        device = cairo_pdf, width = 10, height = 6.5)
 
 # Supp A Fig 13
-FPR_summary <- summary_df_2 %>% 
+FPR_summary <- summary_df_2 %>%
   select(n, SNR, Algorithm, FPR) %>%
   rename(mean_value = FPR)
 p13 <- feynman_SR_plot(FPR_summary, xlab = "SNR", ylab = "FPR", title = "")

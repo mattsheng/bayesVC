@@ -1,14 +1,15 @@
-Package: BartVC
+Package: bayesVC
 Title: Bayesian tree ensemble variable selection using VC-measure
 Version: 1.0.0
 Authors@R: 
     c(person("Shengbin", "Ye", , "sy21@northwestern.edu", role = c("aut", "cre")),
       person("Meng", "Li", , "meng@rice.edu", role = c("aut")))
 Description: This R package performs nonparametric variable selection using Bayesian tree ensemble models with VC-measure as the variable importance measure.
+URL: https://github.com/mattsheng/bayesVC, https://arxiv.org/abs/2509.07121
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.3
 Imports:
     BART
 Suggests:

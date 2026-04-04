@@ -1,0 +1,8 @@
+bibentry(
+  bibtype = "Article",
+  title = "Posterior Summarization for Variable Selection in Bayesian Tree Ensembles",
+  author = "Shengbin Ye, Meng Li",
+  journal = "arXiv",
+  year = "2025",
+  doi = "10.48550/arXiv.2509.07121"
+)

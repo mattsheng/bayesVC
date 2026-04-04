@@ -2,14 +2,14 @@
 #'
 #' @description
 #' This function trains `Lrep` (default to 10) DART models using different random
-#' seeds, and extracts the VC-measure from each fit. Hierarchical agglomerative clustering (HAC)
+#' seeds, and extracts the VC-measure from each fit. Hierarchical Agglomerative Clustering (HAC)
 #' is then performed on the VC-measure and identifies important predictors.
 #'
 #' @param y Response vector.
 #' @param X Predictor or feature matrix.
 #' @param seed Random seed.
 #' @param Lrep Number of replications.
-#' @param backend The R package used to implement DART. The two choices are `"dartMachine"` (the one used in the paper) and `"BART"`.
+#' @param backend The R package used to implement DART. The two choices are `"BART"` and `"dartMachine"` (the one used in the paper).
 #'
 #' @return A list containing
 #' * `pos_idx`: selected variable indices
@@ -18,12 +18,9 @@
 #' @importFrom stats quantile dist hclust cutree
 #'
 #' @examples
-#' # Example code using `dartMachine` R package as the backend
+#' #' # Example code using `BART` R package as the backend
 #' \dontrun{
-#' # Must allocate memory before loading `BartVC` package when using `dartMachine` backend
-#' # Here I allocated 5GB of memory for Java
-#' options(java.parameters = c("-Xmx5g"))
-#' library(BartVC)
+#' library(bayesVC)
 #'
 #' set.seed(123)
 #' n <- 1000
@@ -35,17 +32,22 @@
 #' eps <- rnorm(n, mean = 0, sd = 2)
 #' y <- y_mu + eps
 #'
-#' VC_result <- DartVC(y = y,
-#'                     X = X,
-#'                     seed = 123,
-#'                     Lrep = Lrep,
-#'                     backend = "dartMachine")
+#' VC_result <- DartVC(
+#'   y = y,
+#'   X = X,
+#'   seed = 123,
+#'   Lrep = Lrep,
+#'   backend = "BART"
+#' )
 #' VC_result$pos_idx
 #' }
 #'
-#' # Example code using `BART` R package as the backend
+#' # Example code using `dartMachine` R package as the backend
 #' \dontrun{
-#' library(BartVC)
+#' # Must allocate memory before loading `bayesVC` package when using `dartMachine` backend
+#' # Here I allocated 5GB of memory for Java
+#' options(java.parameters = c("-Xmx5g"))
+#' library(bayesVC)
 #'
 #' set.seed(123)
 #' n <- 1000
@@ -57,13 +59,17 @@
 #' eps <- rnorm(n, mean = 0, sd = 2)
 #' y <- y_mu + eps
 #'
-#' VC_result <- DartVC(y = y,
-#'                     X = X,
-#'                     seed = 123,
-#'                     Lrep = Lrep,
-#'                     backend = "dartMachine")
-#' VC_result[["pos_idx"]]
+#' VC_result <- DartVC(
+#'   y = y,
+#'   X = X,
+#'   seed = 123,
+#'   Lrep = Lrep,
+#'   backend = "dartMachine"
+#' )
+#' VC_result$pos_idx
 #' }
+#'
+
 #' @export
 DartVC <- function(y, X, seed = 123, Lrep = 10, backend = c("dartMachine", "BART")) {
   set.seed(seed)
@@ -74,11 +80,13 @@ DartVC <- function(y, X, seed = 123, Lrep = 10, backend = c("dartMachine", "BART
       stop("Package dartMachine is required but not installed. Please install it from https://github.com/theodds/dartMachine")
     }
     results <- DartVC_dartMachine(y, X, Lrep, seeds)
-  } else {
+  } else if (backend == "BART") {
     if (!requireNamespace("BART", quietly = TRUE)) {
       stop("Package BART is required but not installed. Please install it with install.packages('BART').")
     }
     results <- DartVC_BART(y, X, Lrep, seeds)
+  } else {
+    stop('backend must be either "dartMachine" or "BART"')
   }
 
   # Calculate summary statistics
@@ -108,7 +116,7 @@ DartVC <- function(y, X, seed = 123, Lrep = 10, backend = c("dartMachine", "BART
   return(list(pos_idx = pos_idx, Z = Z, Z_raw = Z_raw))
 }
 
-DartVC_dartMachine <- function (y, X, Lrep, seeds) {
+DartVC_dartMachine <- function(y, X, Lrep, seeds) {
   X <- as.data.frame(X)
   vc <- matrix(NA, nrow = Lrep, ncol = ncol(X))
 
@@ -139,7 +147,7 @@ DartVC_dartMachine <- function (y, X, Lrep, seeds) {
   return(list(vc = vc, vc_rank = vc_rank))
 }
 
-DartVC_BART <- function (y, X, Lrep, seeds) {
+DartVC_BART <- function(y, X, Lrep, seeds) {
   vc <- matrix(NA, nrow = Lrep, ncol = ncol(X))
 
   # Train Lrep DART models using different seeds
