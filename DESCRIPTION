@@ -1,6 +1,6 @@
 Package: bayesVC
 Title: Bayesian tree ensemble variable selection using VC-measure
-Version: 1.0.1
+Version: 1.0.2
 Authors@R: 
     c(person("Shengbin", "Ye", , "sy21@northwestern.edu", role = c("aut", "cre")),
       person("Meng", "Li", , "meng@rice.edu", role = c("aut")))

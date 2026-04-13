@@ -1,10 +1,11 @@
-#' Perform variable selection using DART VC-measure
+#' Perform variable selection using DART VIP Rank
 #'
 #' @description
-#' This function trains `Lrep` (default to 10) DART models using different random
-#' seeds, and extracts the VC-measure from each fit. Hierarchical Agglomerative
-#' Clustering (HAC) is then performed on the VC-measure and identifies important
-#' predictors.
+#' This function trains `Lrep` (default to 10) DART models (sparse BART with
+#' Dirichlet prior on variable selection) using different random seeds, extracts
+#' the Variable Inclusion Proportion (VIP) from each fit, and computes average
+#' VIP rankings across replications. Hierarchical Agglomerative Clustering (HAC)
+#' is then performed on the average VIP rankings to identify important predictors.
 #'
 #' @param y Response vector. For `mode = "classification"`, must be a numeric
 #'   vector with exactly 2 unique values.
@@ -21,11 +22,10 @@
 #'
 #' @return A list containing
 #' * `pos_idx`: selected variable indices
-#' * `Z`: VC-measure summary matrix ([log1p()] transformed followed by [scale()])
-#' * `Z_raw`: the raw VC-measure summary matrix
+#' * `vip_avg`: average VIP across replications (vector of length `ncol(X)`)
+#' * `vip_rank_avg`: average VIP rank across replications (vector of length `ncol(X)`)
 #' @importFrom stats dist hclust cutree
 #' @importFrom future.apply future_lapply
-#' @importFrom matrixStats colQuantiles
 #'
 #' @examples
 #' # Regression example using the `BART` backend
@@ -42,13 +42,13 @@
 #' eps <- rnorm(n, mean = 0, sd = 2)
 #' y <- y_mu + eps
 #'
-#' result <- DartVC(y = y, X = X, seed = 123, Lrep = Lrep, backend = "BART")
+#' result <- DartVIP(y = y, X = X, seed = 123, Lrep = Lrep, backend = "BART")
 #' result$pos_idx
 #' }
 #'
 #' # Regression example using the `dartMachine` backend
 #' \dontrun{
-#' # Must allocate memory before loading `bayesVC` when using `dartMachine` backend
+#' # Allocate memory before loading the package (5 GB here)
 #' options(java.parameters = c("-Xmx5g"))
 #' library(bayesVC)
 #'
@@ -62,7 +62,7 @@
 #' eps <- rnorm(n, mean = 0, sd = 2)
 #' y <- y_mu + eps
 #'
-#' result <- DartVC(y = y, X = X, seed = 123, Lrep = Lrep, backend = "dartMachine")
+#' result <- DartVIP(y = y, X = X, seed = 123, Lrep = Lrep, backend = "dartMachine")
 #' result$pos_idx
 #' }
 #'
@@ -77,12 +77,14 @@
 #'
 #' X <- matrix(runif(n * p), n, p)
 #' mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 +
-#'       10 * X[, 4] + 5 * X[, 5]
+#'   10 * X[, 4] + 5 * X[, 5]
 #' mu_scaled <- (mu - mean(mu)) / sd(mu)
 #' y <- rbinom(n, size = 1, prob = pnorm(mu_scaled))
 #'
-#' result <- DartVC(y = y, X = X, seed = 123, Lrep = Lrep, backend = "BART",
-#'                  mode = "classification")
+#' result <- DartVIP(
+#'   y = y, X = X, seed = 123, Lrep = Lrep, backend = "BART",
+#'   mode = "classification"
+#' )
 #' result$pos_idx
 #' }
 #'
@@ -103,91 +105,101 @@
 #' eps <- rnorm(n, mean = 0, sd = 2)
 #' y <- y_mu + eps
 #'
-#' result <- DartVC(y = y, X = X, seed = 123, Lrep = Lrep, backend = "BART")
+#' result <- DartVIP(y = y, X = X, seed = 123, Lrep = Lrep, backend = "BART")
 #' result$pos_idx
 #'
 #' plan(sequential)
 #' }
-#'
+
 #' @export
-DartVC <- function(y, X, seed = 123, Lrep = 10,
-                   backend = c("dartMachine", "BART"),
-                   mode = c("regression", "classification")) {
+DartVIP <- function(y, X, seed = 123, Lrep = 10,
+                    backend = c("dartMachine", "BART"),
+                    mode = c("regression", "classification")) {
   backend <- match.arg(backend)
-  mode    <- match.arg(mode)
+  mode <- match.arg(mode)
 
-  if (mode == "classification" && backend == "dartMachine")
+  if (mode == "classification" && backend == "dartMachine") {
     stop("'dartMachine' backend does not support mode = \"classification\". Use backend = \"BART\".")
+  }
 
-  if (!is.numeric(y) || !is.null(dim(y)))
+  if (!is.numeric(y) || !is.null(dim(y))) {
     stop("'y' must be a numeric vector.")
-  if (anyNA(y))
+  }
+  if (anyNA(y)) {
     stop("'y' contains NA values.")
-  if (mode == "classification" && length(unique(y)) != 2L)
+  }
+  if (mode == "classification" && length(unique(y)) != 2L) {
     stop("Only binary classification is supported. 'y' must contain exactly 2 unique values.")
+  }
 
-  if (!is.matrix(X) || !is.numeric(X))
+  if (!is.matrix(X) || !is.numeric(X)) {
     stop("'X' must be a numeric matrix.")
-  if (anyNA(X))
+  }
+  if (anyNA(X)) {
     stop("'X' contains NA values.")
+  }
 
-  if (nrow(X) != length(y))
+  if (nrow(X) != length(y)) {
     stop(sprintf("nrow(X) (%d) must equal length(y) (%d).", nrow(X), length(y)))
+  }
 
   set.seed(seed)
   seeds <- sample.int(10000, size = Lrep)
 
-  rng_states <- lapply(seeds, function(s) { set.seed(s); .Random.seed })
+  rng_states <- lapply(seeds, function(s) {
+    set.seed(s)
+    .Random.seed
+  })
 
   if (backend == "dartMachine") {
     if (!requireNamespace("dartMachine", quietly = TRUE)) {
       stop("Package dartMachine is required but not installed. Please install it from https://github.com/theodds/dartMachine")
     }
-    worker <- DartVC_dartMachine
+    worker <- DartVIP_dartMachine
     X <- as.data.frame(X)
   } else {
     if (!requireNamespace("BART", quietly = TRUE)) {
       stop("Package BART is required but not installed. Please install it with install.packages('BART').")
     }
-    worker <- if (mode == "classification") DartVC_pbart else DartVC_BART
+    worker <- if (mode == "classification") DartVIP_pbart else DartVIP_BART
   }
 
-  vc_list <- future_lapply(seq_len(Lrep), worker, y = y, Xmat = X, seeds = seeds,
-                           future.seed = rng_states)
+  vip_list <- future_lapply(seq_len(Lrep), worker,
+    y = y, Xmat = X, seeds = seeds,
+    future.seed = rng_states
+  )
 
-  vc <- do.call(rbind, vc_list)
-  vc_rank <- t(apply(vc, 1, function(x) rank(-x)))
+  vip <- do.call(rbind, vip_list)
 
-  # Calculate summary statistics
-  vc_avg      <- colMeans(vc)
-  vc_q25      <- matrixStats::colQuantiles(vc, probs = 0.25)
-  vc_rank_avg <- colMeans(vc_rank)
-  vc_rank_q75 <- matrixStats::colQuantiles(vc_rank, probs = 0.75)
+  # Average VIP across replications
+  vip_avg <- colMeans(vip, na.rm = TRUE)
 
-  # Combine summary statistics
-  Z_raw <- cbind(vc_avg, vc_q25, vc_rank_avg, vc_rank_q75)
-  Z <- log1p(Z_raw)
-  Z <- scale(Z)
+  # Average VIP rank across replications (rank 1 = most included)
+  vip_rank <- t(apply(vip, 1, function(x) rank(-x)))
+  vip_rank_avg <- colMeans(vip_rank, na.rm = TRUE)
 
-  # Hierarchical clustering on Z
-  Z_dist        <- dist(Z, method = "euclidean")
-  hclust_result <- hclust(Z_dist, method = "average")
+  # Hierarchical clustering on the average rank vector
+  rank_dist <- dist(vip_rank_avg, method = "euclidean")
+  hclust_result <- hclust(rank_dist, method = "average")
 
   # Cut the tree to obtain 2 clusters
-  clusters      <- cutree(hclust_result, k = 2)
-  cluster_means <- tapply(Z[, 1], clusters, mean)
+  clusters <- cutree(hclust_result, k = 2)
+  cluster_means <- tapply(vip_rank_avg, clusters, mean)
 
-  # Find predictors corresponding to the cluster with the largest VC average
-  pos_cls_id <- as.numeric(names(which.max(cluster_means)))
-  pos_idx    <- as.integer(which(clusters == pos_cls_id))
+  # Select the cluster with the smallest mean rank (= best-ranked variables)
+  pos_cls_id <- as.numeric(names(which.min(cluster_means)))
+  pos_idx <- as.integer(which(clusters == pos_cls_id))
 
-  return(list(pos_idx = pos_idx, Z = Z, Z_raw = Z_raw))
+  return(list(pos_idx = pos_idx, vip_avg = vip_avg, vip_rank_avg = vip_rank_avg))
 }
 
-DartVC_dartMachine <- function(l, y, Xmat, seeds) {
+DartVIP_dartMachine <- function(l, y, Xmat, seeds) {
   temp_output <- tempfile()
   sink(temp_output)
-  on.exit({ sink(); unlink(temp_output) })
+  on.exit({
+    sink()
+    unlink(temp_output)
+  })
   dm <- dartMachine::bartMachine(
     X = Xmat,
     y = y,
@@ -201,15 +213,17 @@ DartVC_dartMachine <- function(l, y, Xmat, seeds) {
     do_ard = TRUE,
     do_prior = TRUE
   )
-  vc_full <- dartMachine::get_var_counts_over_chain(dm)
-  colMeans(vc_full)
+  dartMachine::get_var_props_over_chain(dm)
 }
 
-DartVC_BART <- function(l, y, Xmat, ...) {
+DartVIP_BART <- function(l, y, Xmat, ...) {
   temp_output <- tempfile()
   sink(temp_output)
-  on.exit({ sink(); unlink(temp_output) })
-  dart <- BART::wbart(
+  on.exit({
+    sink()
+    unlink(temp_output)
+  })
+  bart <- BART::wbart(
     x.train    = Xmat,
     y.train    = y,
     sparse     = TRUE,
@@ -218,13 +232,19 @@ DartVC_BART <- function(l, y, Xmat, ...) {
     ndpost     = 5000,
     printevery = 10000
   )
-  dart$varcount.mean
+  # Normalise each MCMC draw's variable counts to proportions,
+  # then average across draws. na.rm guards against all-zero draws.
+  vip <- apply(bart$varcount, 1, function(x) x / sum(x)) # p x ndpost
+  rowMeans(vip, na.rm = TRUE)
 }
 
-DartVC_pbart <- function(l, y, Xmat, ...) {
+DartVIP_pbart <- function(l, y, Xmat, ...) {
   temp_output <- tempfile()
   sink(temp_output)
-  on.exit({ sink(); unlink(temp_output) })
+  on.exit({
+    sink()
+    unlink(temp_output)
+  })
   dart <- BART::pbart(
     x.train    = Xmat,
     y.train    = y,
@@ -234,5 +254,8 @@ DartVC_pbart <- function(l, y, Xmat, ...) {
     ndpost     = 5000,
     printevery = 10000
   )
-  dart$varcount.mean
+  # Normalise each MCMC draw's variable counts to proportions,
+  # then average across draws. na.rm guards against all-zero draws.
+  vip <- apply(dart$varcount, 1, function(x) x / sum(x)) # p x ndpost
+  rowMeans(vip, na.rm = TRUE)
 }

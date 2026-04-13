@@ -7,15 +7,26 @@
 
 <!-- badges: end -->
 
-bayesVC implements the VC-measure based nonparametric variable selection
-method introduce in [*Posterior Summarization for Variable Selection in
-Bayesian Tree Ensembles*](https://arxiv.org/abs/2509.07121).
+bayesVC implements two nonparametric variable selection methods for
+Bayesian tree ensembles:
 
-The current package utilizes Dirichlet Additive Regression Trees
-([DART](https://www.tandfonline.com/doi/full/10.1080/01621459.2016.1264957))
-as the nonparametric model, though other Bayesian tree ensemble models
-can also be used. We refer to VC-measure with DART backend as **DART
-VC-measure**.
+- **DART VC-measure** — introduced in [*Posterior Summarization for
+  Variable Selection in Bayesian Tree
+  Ensembles*](https://arxiv.org/abs/2509.07121). Extracts the Variable
+  Count (VC) from DART fits and applies Hierarchical Agglomerative
+  Clustering (HAC) to separate signal variables from noise.
+
+- **DART VIP Rank** — introduced in [Ab Initio Nonparametric Variable
+  Selection for Scalable Symbolic Regression with Large
+  $p$](https://openreview.net/forum?id=9gyJJw8ZUj). Extracts the
+  Variable Inclusion Proportion (VIP) from DART fits, ranks variables by
+  average VIP, and applies HAC as a pre-screening step to identify
+  candidate predictors with high sensitivity.
+
+Both methods support **regression** and **binary classification**
+(experimental) tasks, and integrate with any DART backend via the
+[`future`](https://future.futureverse.org/) package for parallel
+execution.
 
 ## Installation
 
@@ -37,7 +48,10 @@ implementations:
 - `dartMachine`: requires installation from
   <https://github.com/theodds/dartMachine>
 
-## Example
+Note: the `dartMachine` backend is only supported for regression
+(`mode = "regression"`).
+
+## Example: DART VC-measure
 
 We demonstrate DART VC-measure using the Friedman equation:
 
@@ -48,8 +62,7 @@ sampled iid from an Uniform(0, 1) distribution. The goal is to identify
 the truly relevant predictors, namely $(x_1,x_2,x_3,x_4,x_5)$, from all
 $p=100$ predictors.
 
-To use the `BART` backend, simply load the `bayesVC` package and run the
-following code:
+### Regression
 
 ``` r
 library(bayesVC)
@@ -67,11 +80,12 @@ y <- y_mu + eps
 
 # Perform DART VC-measure using `BART` backend
 VC_result <- DartVC(
-  y = y, 
-  X = X, 
-  seed = 123, 
-  Lrep = Lrep, 
-  backend = "BART"
+  y = y,
+  X = X,
+  seed = 123,
+  Lrep = Lrep,
+  backend = "BART",
+  mode = "regression"
 )
 
 # Examine the selected predictors
@@ -79,13 +93,48 @@ VC_result$pos_idx
 #> [1] 1 2 3 4 5
 ```
 
-To use the `dartMachine` backend, we must allocate memory for Java
-before loading the `bayesVC` package:
+### Binary classification
+
+Pass `mode = "classification"` to switch to probit BART
+(`BART::pbart()`). The response `y` must be a numeric vector with
+exactly 2 unique values.
 
 ``` r
-# Must allocate memory before loading `bayesVC` package when using `dartMachine` backend
-# Here I allocated 5GB of memory for Java
-options(java.parameters = c("-Xmx5g"))
+library(bayesVC)
+
+set.seed(123)
+n <- 500
+p <- 100
+Lrep <- 10
+
+# Generate binary response via Friedman probit DGP
+X <- matrix(runif(n * p), n, p)
+mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5 * X[, 5]
+mu_scaled <- (mu - mean(mu)) / sd(mu)
+y <- rbinom(n, size = 1, prob = pnorm(mu_scaled))
+
+# Perform DART VC-measure for binary classification
+VC_result <- DartVC(
+  y = y,
+  X = X,
+  seed = 123,
+  Lrep = Lrep,
+  backend = "BART",
+  mode = "classification"
+)
+
+VC_result$pos_idx
+#> [1]  1  2  3  4  5 39 81
+```
+
+## Example: DART VIP Rank
+
+DART VIP Rank (`DartVIP`) is designed as a **pre-screening** method: it
+achieves near-perfect sensitivity (TPR ≈ 1) at the cost of selecting
+more variables than DART VC-measure. It shares the same interface,
+including `mode` and `backend` arguments.
+
+``` r
 library(bayesVC)
 
 set.seed(123)
@@ -93,33 +142,32 @@ n <- 1000
 p <- 100
 Lrep <- 10
 
-# Generate data (y, X)
 X <- matrix(runif(n * p), n, p)
 y_mu <- 10 * sin(pi * X[, 1] * X[, 2]) + 20 * (X[, 3] - 0.5)^2 + 10 * X[, 4] + 5 * X[, 5]
 eps <- rnorm(n, mean = 0, sd = 2)
 y <- y_mu + eps
 
-# Perform DART VC-measure using `dartMachine` backend
-VC_result <- DartVC(
-  y = y, 
-  X = X, 
-  seed = 123, 
-  Lrep = Lrep, 
-  backend = "dartMachine"
+VIP_result <- DartVIP(
+  y = y,
+  X = X,
+  seed = 123,
+  Lrep = Lrep,
+  backend = "BART",
+  mode = "regression"
 )
 
-# Examine the selected predictors
-VC_result$pos_idx
+VIP_result$pos_idx
+#> [1]  1  2  3  4  5 23 31 32
 ```
 
 ## Parallel processing
 
-`DartVC` runs the `Lrep` replications via
+Both `DartVC` and `DartVIP` run the `Lrep` replications via
 [`future.apply::future_lapply`](https://future.apply.futureverse.org/),
 so parallelism is controlled by the
-[`future`](https://future.futureverse.org/) package. By default it runs
+[`future`](https://future.futureverse.org/) package. By default they run
 sequentially. To use all available cores, set a `multisession` plan
-before calling `DartVC`:
+before calling either function:
 
 ``` r
 library(future)
@@ -143,13 +191,18 @@ VC_result <- DartVC(
   X = X,
   seed = 123,
   Lrep = Lrep,
-  backend = "BART"
+  backend = "BART",
+  mode = "regression"
 )
 VC_result$pos_idx
 
 # Restore sequential execution
 plan(sequential)
 ```
+
+Note: the `dartMachine` backend does not support `plan(multisession)`
+because JVM parameters are not inherited by worker processes. Use
+`plan(sequential)` (the default) when using the `dartMachine` backend.
 
 ## Reproduce paper results
 
@@ -193,7 +246,11 @@ all figures in the paper. For instance,
 [postprocessing/fig3_12_13.R](postprocessing/fig3_12_13.R) reproduces
 Figures 3, 12, and 13 in the paper.
 
-## Reference
+## References
 
 Ye, S. and Li, M. (2025) Posterior Summarization for Variable Selection
 in Bayesian Tree Ensembles. [arXiv](https://arxiv.org/abs/2509.07121)
+
+Ye, S. and Li, M. (2025) Ab Initio Nonparametric Variable Selection for
+Scalable Symbolic Regression with Large $p$. *ICML 2025*.
+[OpenReview](https://openreview.net/forum?id=9gyJJw8ZUj)
