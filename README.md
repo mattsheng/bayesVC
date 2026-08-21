@@ -25,16 +25,6 @@ implementations:
 - `BART`: installed automatically with `BartVC`, or can be easily
   installed via `install.packages('BART')`
 
-## Installation
-
-You can install the development version of `BartVC` from
-[GitHub](https://github.com/mattsheng/BartVC) with:
-
-``` r
-# install.packages("devtools")
-devtools::install_github("mattsheng/BartVC")
-```
-
 ## Example
 
 We demonstrate DART VC-measure using the Friedman equation:
